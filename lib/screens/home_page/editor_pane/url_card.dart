@@ -86,9 +86,9 @@ class EditorPaneRequestURLCard extends ConsumerWidget {
                     height: 36,
                     child: apiType == APIType.mqtt
                         ? const MqttConnectButton()
-                    child: apiType == APIType.websocket
-                        ? const WsConnectButton()
-                        : const SendRequestButton(),
+                        : apiType == APIType.websocket
+                            ? const WsConnectButton()
+                            : const SendRequestButton(),
                   )
                 ],
               ),
@@ -226,8 +226,6 @@ class MqttVersionDropdown extends ConsumerWidget {
 
 class MqttClientIdField extends ConsumerWidget {
   const MqttClientIdField({super.key});
-class WsConnectButton extends ConsumerWidget {
-  const WsConnectButton({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -274,6 +272,45 @@ class MqttConnectButton extends ConsumerWidget {
         connectionInfo.state == MqttConnectionState.connecting;
 
     return ADFilledButton(
+      isTonal: isConnected,
+      items: [
+        Text(
+          isConnecting
+              ? kLabelMqttConnecting
+              : isConnected
+                  ? kLabelDisconnect
+                  : kLabelConnect,
+          style: kTextStyleButton,
+        ),
+        kHSpacer6,
+        Icon(
+          size: 16,
+          isConnected ? Icons.link_off : Icons.link,
+        ),
+      ],
+      onPressed: isConnecting
+          ? null
+          : () {
+              if (isConnected) {
+                ref
+                    .read(collectionStateNotifierProvider.notifier)
+                    .disconnectMqtt();
+              } else {
+                ref
+                    .read(collectionStateNotifierProvider.notifier)
+                    .connectMqtt();
+              }
+            },
+    );
+  }
+}
+
+class WsConnectButton extends ConsumerWidget {
+  const WsConnectButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedId = ref.watch(selectedIdStateProvider);
     if (selectedId == null) return const SizedBox.shrink();
 
     final wsState = ref.watch(wsStateProvider(selectedId));
@@ -294,34 +331,6 @@ class MqttConnectButton extends ConsumerWidget {
           ? null
           : () {
               if (isConnected) {
-                ref
-                    .read(collectionStateNotifierProvider.notifier)
-                    .disconnectMqtt();
-              } else {
-                ref
-                    .read(collectionStateNotifierProvider.notifier)
-                    .connectMqtt();
-              }
-            },
-      isTonal: isConnected,
-      items: [
-        Text(
-          isConnecting
-              ? kLabelMqttConnecting
-              : isConnected
-                  ? kLabelDisconnect
-                  : kLabelConnect,
-          style: kTextStyleButton,
-        ),
-        kHSpacer6,
-        Icon(
-          size: 16,
-          isConnected ? Icons.link_off : Icons.link,
-        ),
-      ],
-    );
-  }
-}
                 ref.read(wsStateProvider(selectedId).notifier).disconnect();
               } else {
                 final url = ref

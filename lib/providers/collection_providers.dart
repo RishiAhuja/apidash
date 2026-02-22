@@ -293,7 +293,6 @@ class CollectionStateNotifier
             httpRequestModel: null,
             aiRequestModel: null,
             mqttRequestModel: const MqttRequestModel()),
-                : AIRequestModel.fromJson(defaultModel)),
         APIType.websocket => currentModel.copyWith(
             apiType: apiType,
             name: name ?? currentModel.name,

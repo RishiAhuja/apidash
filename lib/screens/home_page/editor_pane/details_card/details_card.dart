@@ -21,7 +21,9 @@ class EditorPaneRequestDetailsCard extends ConsumerWidget {
         selectedRequestModelProvider.select((value) => value?.apiType));
 
     Widget rightWidget;
-    if (!isDashbotPopped) {
+    if (apiType == APIType.websocket) {
+      rightWidget = const WsResponsePane();
+    } else if (!isDashbotPopped) {
       rightWidget = DashbotTab();
     } else if (apiType == APIType.mqtt) {
       rightWidget = const MqttResponsePane();
@@ -30,17 +32,6 @@ class EditorPaneRequestDetailsCard extends ConsumerWidget {
     } else {
       rightWidget = const ResponsePane();
     }
-    final apiType = ref
-        .watch(selectedRequestModelProvider.select((m) => m?.apiType));
-
-    // For WebSocket, right pane is always the WS response/messages view.
-    final rightWidget = apiType == APIType.websocket
-        ? const WsResponsePane()
-        : !isDashbotPopped
-            ? DashbotTab()
-            : codePaneVisible
-                ? const CodePane()
-                : const ResponsePane();
 
     return RequestDetailsCard(
       child: EqualSplitView(
