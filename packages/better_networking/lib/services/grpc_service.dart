@@ -142,19 +142,34 @@ class GrpcClientManager {
       throw const GrpcError.invalidArgument('Host cannot be empty');
     }
 
+    final channelOptions = ChannelOptions(
+      credentials: config.useTls
+          ? const ChannelCredentials.secure()
+          : const ChannelCredentials.insecure(),
+      connectionTimeout: const Duration(seconds: 10),
+    );
+
+    // Main channel — used exclusively for actual RPC invocations.
     _channel = ClientChannel(
       host,
       port: config.port,
-      options: ChannelOptions(
-        credentials: config.useTls
-            ? const ChannelCredentials.secure()
-            : const ChannelCredentials.insecure(),
-        connectionTimeout: const Duration(seconds: 10),
-      ),
+      options: channelOptions,
     );
 
     if (config.useReflection) {
-      await _discoverViaReflection();
+      // Use a SEPARATE ephemeral channel for reflection so that stream
+      // cancellations (RST_STREAM) from .first calls cannot cause the server
+      // to GOAWAY the main channel before we even invoke a method.
+      final reflectionChannel = ClientChannel(
+        host,
+        port: config.port,
+        options: channelOptions,
+      );
+      try {
+        await _discoverViaReflection(reflectionChannel);
+      } finally {
+        await reflectionChannel.shutdown();
+      }
     } else if (config.descriptorFileBytes != null) {
       _loadFromDescriptor(config.descriptorFileBytes!);
     }
@@ -163,8 +178,8 @@ class GrpcClientManager {
   }
 
   /// Discover services via gRPC server reflection.
-  Future<void> _discoverViaReflection() async {
-    final reflectionClient = ServerReflectionClient(_channel!);
+  Future<void> _discoverViaReflection(ClientChannel channel) async {
+    final reflectionClient = ServerReflectionClient(channel);
 
     // List all services
     final listRequest = ServerReflectionRequest()..listServices = '';
@@ -533,90 +548,180 @@ class GrpcBidiStreamController {
 }
 
 // ---------------------------------------------------------------------------
-// Dynamic Protobuf JSON <-> Binary Codec
+// Dynamic Protobuf JSON → Binary Codec
+// Direct wire-format encoding — does NOT use PbFieldType or CodedBufferWriter.
 // ---------------------------------------------------------------------------
 
-/// Encode a JSON map into protobuf binary using descriptor metadata.
+// Wire types
+const int _kWireVarint = 0; // int32, int64, uint32/64, sint32/64, bool, enum
+const int _kWire64Bit = 1; // fixed64, sfixed64, double
+const int _kWireLen = 2; // string, bytes, embedded messages
+const int _kWire32Bit = 5; // fixed32, sfixed32, float
+
+/// Minimal byte buffer used by the encoder.
+class _Buf {
+  final List<int> _b = [];
+  void addByte(int v) => _b.add(v & 0xFF);
+  void addAll(List<int> bytes) => _b.addAll(bytes);
+  int get length => _b.length;
+  Uint8List toBytes() => Uint8List.fromList(_b);
+}
+
+/// Write a base-128 varint (unsigned 64-bit value) to [buf].
+void _writeVarint(_Buf buf, int value) {
+  // Treat as unsigned via >>> 
+  var v = value;
+  while (v > 0x7F || v < 0) {
+    buf.addByte((v & 0x7F) | 0x80);
+    v = v >>> 7;
+  }
+  buf.addByte(v);
+}
+
+/// Write a 64-bit varint using fixnum's Int64 (handles full 64-bit range).
+void _writeVarint64(_Buf buf, Int64 value) {
+  var v = value;
+  while (v > Int64(0x7F) || v < Int64.ZERO) {
+    buf.addByte(((v & Int64(0x7F)) | Int64(0x80)).toInt());
+    v = v.shiftRightUnsigned(7);
+  }
+  buf.addByte(v.toInt());
+}
+
+void _writeTag(_Buf buf, int fieldNumber, int wireType) {
+  _writeVarint(buf, (fieldNumber << 3) | wireType);
+}
+
+void _writeLengthDelimited(_Buf buf, int fieldNumber, List<int> bytes) {
+  _writeTag(buf, fieldNumber, _kWireLen);
+  _writeVarint(buf, bytes.length);
+  buf.addAll(bytes);
+}
+
+/// Encode a JSON map into protobuf binary using the given message descriptor.
 Uint8List jsonToProtobuf(
   Map<String, dynamic> json,
   DescriptorProto descriptor,
   GrpcTypeRegistry typeRegistry,
 ) {
-  final writer = CodedBufferWriter();
-  _writeMessage(writer, json, descriptor, typeRegistry);
-  return writer.toBuffer();
+  return _encodeMessage(json, descriptor, typeRegistry);
 }
 
-void _writeMessage(
-  CodedBufferWriter writer,
+Uint8List _encodeMessage(
   Map<String, dynamic> json,
   DescriptorProto descriptor,
   GrpcTypeRegistry typeRegistry,
 ) {
+  final buf = _Buf();
   for (final field in descriptor.field) {
     final value = json[field.name] ?? json[field.jsonName];
     if (value == null) continue;
 
-    if (field.label == FieldDescriptorProto_Label.LABEL_REPEATED &&
-        value is List) {
-      for (final item in value) {
-        _writeField(writer, field, item, typeRegistry);
+    final isRepeated =
+        field.label == FieldDescriptorProto_Label.LABEL_REPEATED &&
+            value is List;
+
+    if (isRepeated) {
+      for (final item in value as Iterable) {
+        _encodeField(buf, field, item, typeRegistry);
       }
     } else {
-      _writeField(writer, field, value, typeRegistry);
+      _encodeField(buf, field, value, typeRegistry);
     }
   }
+  return buf.toBytes();
 }
 
-void _writeField(
-  CodedBufferWriter writer,
+void _encodeField(
+  _Buf buf,
   FieldDescriptorProto field,
   dynamic value,
   GrpcTypeRegistry typeRegistry,
 ) {
-  final tag = field.number;
-
+  final fn = field.number;
   switch (field.type) {
-    case FieldDescriptorProto_Type.TYPE_DOUBLE:
-      writer.writeField(tag, PbFieldType.OD, (value as num).toDouble());
-    case FieldDescriptorProto_Type.TYPE_FLOAT:
-      writer.writeField(tag, PbFieldType.OF, (value as num).toDouble());
-    case FieldDescriptorProto_Type.TYPE_INT64:
-    case FieldDescriptorProto_Type.TYPE_SINT64:
-    case FieldDescriptorProto_Type.TYPE_SFIXED64:
-      writer.writeField(tag, PbFieldType.O6, _toInt64(value));
-    case FieldDescriptorProto_Type.TYPE_UINT64:
-    case FieldDescriptorProto_Type.TYPE_FIXED64:
-      writer.writeField(tag, PbFieldType.O6, _toInt64(value));
-    case FieldDescriptorProto_Type.TYPE_INT32:
-    case FieldDescriptorProto_Type.TYPE_SINT32:
-    case FieldDescriptorProto_Type.TYPE_SFIXED32:
-      writer.writeField(tag, PbFieldType.O3, (value as num).toInt());
-    case FieldDescriptorProto_Type.TYPE_UINT32:
-    case FieldDescriptorProto_Type.TYPE_FIXED32:
-      writer.writeField(tag, PbFieldType.OU3, (value as num).toInt());
+    // ---- Varint wire type (0) ----
     case FieldDescriptorProto_Type.TYPE_BOOL:
-      writer.writeField(tag, PbFieldType.OB, value as bool);
-    case FieldDescriptorProto_Type.TYPE_STRING:
-      writer.writeField(tag, PbFieldType.OS, value as String);
-    case FieldDescriptorProto_Type.TYPE_BYTES:
-      writer.writeField(tag, PbFieldType.OY, base64Decode(value as String));
+      _writeTag(buf, fn, _kWireVarint);
+      _writeVarint(buf, (value as bool) ? 1 : 0);
+
     case FieldDescriptorProto_Type.TYPE_ENUM:
-      writer.writeField(tag, PbFieldType.O3, (value as num).toInt());
+    case FieldDescriptorProto_Type.TYPE_INT32:
+    case FieldDescriptorProto_Type.TYPE_UINT32:
+      _writeTag(buf, fn, _kWireVarint);
+      // Negative int32 must be sign-extended to 64-bit per proto spec.
+      final v = (value as num).toInt();
+      _writeVarint64(buf, Int64(v));
+
+    case FieldDescriptorProto_Type.TYPE_SINT32:
+      // ZigZag: maps signed int to unsigned: 0→0, -1→1, 1→2, -2→3, ...
+      _writeTag(buf, fn, _kWireVarint);
+      final v = (value as num).toInt();
+      _writeVarint(buf, (v << 1) ^ (v >> 31));
+
+    case FieldDescriptorProto_Type.TYPE_INT64:
+    case FieldDescriptorProto_Type.TYPE_UINT64:
+      _writeTag(buf, fn, _kWireVarint);
+      _writeVarint64(buf, _parseInt64(value));
+
+    case FieldDescriptorProto_Type.TYPE_SINT64:
+      _writeTag(buf, fn, _kWireVarint);
+      final v = _parseInt64(value);
+      _writeVarint64(buf, (v << 1) ^ (v >> 63));
+
+    // ---- Fixed 32-bit wire type (5) ----
+    case FieldDescriptorProto_Type.TYPE_FLOAT:
+      _writeTag(buf, fn, _kWire32Bit);
+      final bd = ByteData(4)
+        ..setFloat32(0, (value as num).toDouble(), Endian.little);
+      buf.addAll(bd.buffer.asUint8List());
+
+    case FieldDescriptorProto_Type.TYPE_FIXED32:
+    case FieldDescriptorProto_Type.TYPE_SFIXED32:
+      _writeTag(buf, fn, _kWire32Bit);
+      final bd = ByteData(4)
+        ..setUint32(0, (value as num).toInt() & 0xFFFFFFFF, Endian.little);
+      buf.addAll(bd.buffer.asUint8List());
+
+    // ---- Fixed 64-bit wire type (1) ----
+    case FieldDescriptorProto_Type.TYPE_DOUBLE:
+      _writeTag(buf, fn, _kWire64Bit);
+      final bd = ByteData(8)
+        ..setFloat64(0, (value as num).toDouble(), Endian.little);
+      buf.addAll(bd.buffer.asUint8List());
+
+    case FieldDescriptorProto_Type.TYPE_FIXED64:
+    case FieldDescriptorProto_Type.TYPE_SFIXED64:
+      _writeTag(buf, fn, _kWire64Bit);
+      final v = _parseInt64(value);
+      final bd = ByteData(8)
+        ..setInt32(0, v.toUnsigned(32).toInt(), Endian.little)
+        ..setInt32(4, (v >> 32).toUnsigned(32).toInt(), Endian.little);
+      buf.addAll(bd.buffer.asUint8List());
+
+    // ---- Length-delimited wire type (2) ----
+    case FieldDescriptorProto_Type.TYPE_STRING:
+      final bytes = utf8.encode(value as String);
+      _writeLengthDelimited(buf, fn, bytes);
+
+    case FieldDescriptorProto_Type.TYPE_BYTES:
+      // Normalize base64: handle padded, unpadded, or URL-safe variants.
+      final bytes = base64Decode(base64.normalize(value as String));
+      _writeLengthDelimited(buf, fn, bytes);
+
     case FieldDescriptorProto_Type.TYPE_MESSAGE:
       final msgDescriptor = typeRegistry.findMessage(field.typeName);
       if (msgDescriptor != null && value is Map<String, dynamic>) {
-        final subWriter = CodedBufferWriter();
-        _writeMessage(subWriter, value, msgDescriptor, typeRegistry);
-        final subBytes = subWriter.toBuffer();
-        writer.writeField(tag, PbFieldType.OM, subBytes);
+        final subBytes = _encodeMessage(value, msgDescriptor, typeRegistry);
+        _writeLengthDelimited(buf, fn, subBytes);
       }
+
     default:
       break;
   }
 }
 
-Int64 _toInt64(dynamic value) {
+Int64 _parseInt64(dynamic value) {
   if (value is int) return Int64(value);
   if (value is String) return Int64.parseInt(value);
   return Int64.ZERO;
@@ -644,27 +749,44 @@ Map<String, dynamic> protobufToJson(
     switch (field.type) {
       case FieldDescriptorProto_Type.TYPE_DOUBLE:
         final values =
-            unknownField.fixed64s.map((v) => _int64BitsToDouble(v)).toList();
+            unknownField.fixed64s.map((v) => _bitsToDouble(v)).toList();
         result[field.name] = isRepeated ? values : values.firstOrNull;
       case FieldDescriptorProto_Type.TYPE_FLOAT:
         final values =
-            unknownField.fixed32s.map((v) => _int32BitsToFloat(v)).toList();
+            unknownField.fixed32s.map((v) => _bitsToFloat(v)).toList();
         result[field.name] = isRepeated ? values : values.firstOrNull;
       case FieldDescriptorProto_Type.TYPE_INT64:
-      case FieldDescriptorProto_Type.TYPE_SINT64:
-      case FieldDescriptorProto_Type.TYPE_SFIXED64:
       case FieldDescriptorProto_Type.TYPE_UINT64:
-      case FieldDescriptorProto_Type.TYPE_FIXED64:
         final values =
             unknownField.varints.map((v) => v.toString()).toList();
         result[field.name] = isRepeated ? values : values.firstOrNull;
+      case FieldDescriptorProto_Type.TYPE_SINT64:
+        // Un-zigzag
+        final values = unknownField.varints
+            .map((v) => (v.shiftRightUnsigned(1) ^ -(v & Int64.ONE)).toString())
+            .toList();
+        result[field.name] = isRepeated ? values : values.firstOrNull;
+      case FieldDescriptorProto_Type.TYPE_FIXED64:
+      case FieldDescriptorProto_Type.TYPE_SFIXED64:
+        final values =
+            unknownField.fixed64s.map((v) => v.toString()).toList();
+        result[field.name] = isRepeated ? values : values.firstOrNull;
       case FieldDescriptorProto_Type.TYPE_INT32:
-      case FieldDescriptorProto_Type.TYPE_SINT32:
-      case FieldDescriptorProto_Type.TYPE_SFIXED32:
       case FieldDescriptorProto_Type.TYPE_UINT32:
-      case FieldDescriptorProto_Type.TYPE_FIXED32:
+      case FieldDescriptorProto_Type.TYPE_ENUM:
         final values =
             unknownField.varints.map((v) => v.toInt()).toList();
+        result[field.name] = isRepeated ? values : values.firstOrNull;
+      case FieldDescriptorProto_Type.TYPE_SINT32:
+        // Un-zigzag
+        final values = unknownField.varints
+            .map((v) => (v.toInt() >>> 1) ^ -(v.toInt() & 1))
+            .toList();
+        result[field.name] = isRepeated ? values : values.firstOrNull;
+      case FieldDescriptorProto_Type.TYPE_FIXED32:
+      case FieldDescriptorProto_Type.TYPE_SFIXED32:
+        final values =
+            unknownField.fixed32s.map((v) => v).toList();
         result[field.name] = isRepeated ? values : values.firstOrNull;
       case FieldDescriptorProto_Type.TYPE_BOOL:
         final values =
@@ -679,10 +801,6 @@ Map<String, dynamic> protobufToJson(
         final values = unknownField.lengthDelimited
             .map((v) => base64Encode(v))
             .toList();
-        result[field.name] = isRepeated ? values : values.firstOrNull;
-      case FieldDescriptorProto_Type.TYPE_ENUM:
-        final values =
-            unknownField.varints.map((v) => v.toInt()).toList();
         result[field.name] = isRepeated ? values : values.firstOrNull;
       case FieldDescriptorProto_Type.TYPE_MESSAGE:
         final msgDescriptor = typeRegistry.findMessage(field.typeName);
@@ -701,14 +819,15 @@ Map<String, dynamic> protobufToJson(
   return result;
 }
 
-double _int64BitsToDouble(Int64 bits) {
-  final byteData = ByteData(8);
-  byteData.setInt64(0, bits.toInt(), Endian.little);
-  return byteData.getFloat64(0, Endian.little);
+double _bitsToDouble(Int64 bits) {
+  final bd = ByteData(8);
+  bd.setInt64(0, bits.toInt(), Endian.little);
+  return bd.getFloat64(0, Endian.little);
 }
 
-double _int32BitsToFloat(int bits) {
-  final byteData = ByteData(4);
-  byteData.setInt32(0, bits, Endian.little);
-  return byteData.getFloat32(0, Endian.little);
+double _bitsToFloat(int bits) {
+  final bd = ByteData(4);
+  bd.setInt32(0, bits, Endian.little);
+  return bd.getFloat32(0, Endian.little);
 }
+
