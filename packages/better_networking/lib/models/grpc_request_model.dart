@@ -77,8 +77,8 @@ class GrpcRequestModel {
 
   const GrpcRequestModel({
     this.host = "",
-    this.port = 443,
-    this.useTls = true,
+    this.port = 50051,
+    this.useTls = false,
     this.selectedService,
     this.selectedMethod,
     this.requestBody = "{}",

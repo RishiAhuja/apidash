@@ -183,11 +183,12 @@ class GrpcErrorWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24.0),
+      child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               Icons.error_outline,
@@ -203,7 +204,7 @@ class GrpcErrorWidget extends StatelessWidget {
             ),
             if (errorMessage != null) ...[
               kVSpacer5,
-              Text(
+              SelectableText(
                 errorMessage!,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.error,

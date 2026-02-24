@@ -393,7 +393,7 @@ class GrpcPortField extends ConsumerWidget {
     final requestModel = ref
         .read(collectionStateNotifierProvider.notifier)
         .getRequestModel(selectedId!);
-    final port = requestModel?.grpcRequestModel?.port ?? 443;
+    final port = requestModel?.grpcRequestModel?.port ?? 50051;
     return TextFormField(
       key: Key("grpc-port-$selectedId"),
       initialValue: port.toString(),
@@ -409,9 +409,13 @@ class GrpcPortField extends ConsumerWidget {
       onChanged: (value) {
         final p = int.tryParse(value);
         if (p != null) {
+          // Always read the CURRENT model inline to avoid stale closure.
+          final currentModel = ref
+              .read(collectionStateNotifierProvider.notifier)
+              .getRequestModel(selectedId);
           ref.read(collectionStateNotifierProvider.notifier).update(
                 grpcRequestModel:
-                    requestModel?.grpcRequestModel?.copyWith(port: p),
+                    currentModel?.grpcRequestModel?.copyWith(port: p),
               );
         }
       },

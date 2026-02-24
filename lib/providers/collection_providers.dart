@@ -737,13 +737,31 @@ class CollectionStateNotifier
     if (requestId == null || state == null) return;
 
     final requestModel = state![requestId];
-    final grpcConfig = requestModel?.grpcRequestModel;
+    var grpcConfig = requestModel?.grpcRequestModel;
     if (grpcConfig == null || grpcConfig.host.isEmpty) return;
+
+    // If user typed "host:port" in the host field, parse and split it.
+    final rawHost = grpcConfig.host.trim();
+    final colonIdx = rawHost.lastIndexOf(':');
+    if (colonIdx > 0) {
+      final maybePort = int.tryParse(rawHost.substring(colonIdx + 1));
+      if (maybePort != null) {
+        final cleanHost = rawHost.substring(0, colonIdx);
+        grpcConfig = grpcConfig.copyWith(host: cleanHost, port: maybePort);
+        // Persist the parsed values back into the model.
+        update(
+          id: requestId,
+          grpcRequestModel: grpcConfig,
+        );
+      }
+    }
 
     ref.read(grpcConnectionProvider(requestId).notifier).state =
         const GrpcConnectionInfo(state: GrpcConnectionState.connecting);
 
     try {
+      // Remove any stale manager/channel before creating a fresh one.
+      GrpcClientManager.remove(requestId);
       final manager = GrpcClientManager.getOrCreate(requestId);
       await manager.connect(grpcConfig);
       final services = manager.services;
@@ -768,7 +786,8 @@ class CollectionStateNotifier
       ref.read(grpcConnectionProvider(requestId).notifier).state =
           GrpcConnectionInfo(
         state: GrpcConnectionState.error,
-        errorMessage: 'Connection error: $e',
+        errorMessage:
+            'Failed to connect to ${grpcConfig.host}:${grpcConfig.port} — $e',
       );
     }
   }

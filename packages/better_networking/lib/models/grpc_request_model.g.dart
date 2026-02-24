@@ -17,8 +17,8 @@ Map<String, dynamic> _$GrpcMetadataEntryToJson(GrpcMetadataEntry instance) =>
 
 GrpcRequestModel _$GrpcRequestModelFromJson(Map json) => GrpcRequestModel(
   host: json['host'] as String? ?? "",
-  port: (json['port'] as num?)?.toInt() ?? 443,
-  useTls: json['useTls'] as bool? ?? true,
+  port: (json['port'] as num?)?.toInt() ?? 50051,
+  useTls: json['useTls'] as bool? ?? false,
   selectedService: json['selectedService'] as String?,
   selectedMethod: json['selectedMethod'] as String?,
   requestBody: json['requestBody'] as String? ?? "{}",
