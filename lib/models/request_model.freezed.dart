@@ -41,6 +41,7 @@ mixin _$RequestModel {
   String? get postRequestScript => throw _privateConstructorUsedError;
   AIRequestModel? get aiRequestModel => throw _privateConstructorUsedError;
   MqttRequestModel? get mqttRequestModel => throw _privateConstructorUsedError;
+  GrpcRequestModel? get grpcRequestModel => throw _privateConstructorUsedError;
 
   /// Serializes this RequestModel to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -74,7 +75,8 @@ abstract class $RequestModelCopyWith<$Res> {
       String? preRequestScript,
       String? postRequestScript,
       AIRequestModel? aiRequestModel,
-      MqttRequestModel? mqttRequestModel});
+      MqttRequestModel? mqttRequestModel,
+      GrpcRequestModel? grpcRequestModel});
 
   $HttpRequestModelCopyWith<$Res>? get httpRequestModel;
   $HttpResponseModelCopyWith<$Res>? get httpResponseModel;
@@ -112,6 +114,7 @@ class _$RequestModelCopyWithImpl<$Res, $Val extends RequestModel>
     Object? postRequestScript = freezed,
     Object? aiRequestModel = freezed,
     Object? mqttRequestModel = freezed,
+    Object? grpcRequestModel = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -178,6 +181,10 @@ class _$RequestModelCopyWithImpl<$Res, $Val extends RequestModel>
           ? _value.mqttRequestModel
           : mqttRequestModel // ignore: cast_nullable_to_non_nullable
               as MqttRequestModel?,
+      grpcRequestModel: freezed == grpcRequestModel
+          ? _value.grpcRequestModel
+          : grpcRequestModel // ignore: cast_nullable_to_non_nullable
+              as GrpcRequestModel?,
     ) as $Val);
   }
 
@@ -248,7 +255,8 @@ abstract class _$$RequestModelImplCopyWith<$Res>
       String? preRequestScript,
       String? postRequestScript,
       AIRequestModel? aiRequestModel,
-      MqttRequestModel? mqttRequestModel});
+      MqttRequestModel? mqttRequestModel,
+      GrpcRequestModel? grpcRequestModel});
 
   @override
   $HttpRequestModelCopyWith<$Res>? get httpRequestModel;
@@ -287,6 +295,7 @@ class __$$RequestModelImplCopyWithImpl<$Res>
     Object? postRequestScript = freezed,
     Object? aiRequestModel = freezed,
     Object? mqttRequestModel = freezed,
+    Object? grpcRequestModel = freezed,
   }) {
     return _then(_$RequestModelImpl(
       id: null == id
@@ -352,6 +361,10 @@ class __$$RequestModelImplCopyWithImpl<$Res>
           ? _value.mqttRequestModel
           : mqttRequestModel // ignore: cast_nullable_to_non_nullable
               as MqttRequestModel?,
+      grpcRequestModel: freezed == grpcRequestModel
+          ? _value.grpcRequestModel
+          : grpcRequestModel // ignore: cast_nullable_to_non_nullable
+              as GrpcRequestModel?,
     ));
   }
 }
@@ -376,7 +389,8 @@ class _$RequestModelImpl implements _RequestModel {
       this.preRequestScript,
       this.postRequestScript,
       this.aiRequestModel,
-      this.mqttRequestModel});
+      this.mqttRequestModel,
+      this.grpcRequestModel});
 
   factory _$RequestModelImpl.fromJson(Map<String, dynamic> json) =>
       _$$RequestModelImplFromJson(json);
@@ -420,10 +434,12 @@ class _$RequestModelImpl implements _RequestModel {
   final AIRequestModel? aiRequestModel;
   @override
   final MqttRequestModel? mqttRequestModel;
+  @override
+  final GrpcRequestModel? grpcRequestModel;
 
   @override
   String toString() {
-    return 'RequestModel(id: $id, apiType: $apiType, name: $name, description: $description, requestTabIndex: $requestTabIndex, httpRequestModel: $httpRequestModel, responseStatus: $responseStatus, message: $message, httpResponseModel: $httpResponseModel, isWorking: $isWorking, sendingTime: $sendingTime, isStreaming: $isStreaming, preRequestScript: $preRequestScript, postRequestScript: $postRequestScript, aiRequestModel: $aiRequestModel, mqttRequestModel: $mqttRequestModel)';
+    return 'RequestModel(id: $id, apiType: $apiType, name: $name, description: $description, requestTabIndex: $requestTabIndex, httpRequestModel: $httpRequestModel, responseStatus: $responseStatus, message: $message, httpResponseModel: $httpResponseModel, isWorking: $isWorking, sendingTime: $sendingTime, isStreaming: $isStreaming, preRequestScript: $preRequestScript, postRequestScript: $postRequestScript, aiRequestModel: $aiRequestModel, mqttRequestModel: $mqttRequestModel, grpcRequestModel: $grpcRequestModel)';
   }
 
   @override
@@ -458,7 +474,9 @@ class _$RequestModelImpl implements _RequestModel {
             (identical(other.aiRequestModel, aiRequestModel) ||
                 other.aiRequestModel == aiRequestModel) &&
             (identical(other.mqttRequestModel, mqttRequestModel) ||
-                other.mqttRequestModel == mqttRequestModel));
+                other.mqttRequestModel == mqttRequestModel) &&
+            (identical(other.grpcRequestModel, grpcRequestModel) ||
+                other.grpcRequestModel == grpcRequestModel));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -480,7 +498,8 @@ class _$RequestModelImpl implements _RequestModel {
       preRequestScript,
       postRequestScript,
       aiRequestModel,
-      mqttRequestModel);
+      mqttRequestModel,
+      grpcRequestModel);
 
   /// Create a copy of RequestModel
   /// with the given fields replaced by the non-null parameter values.
@@ -515,7 +534,8 @@ abstract class _RequestModel implements RequestModel {
       final String? preRequestScript,
       final String? postRequestScript,
       final AIRequestModel? aiRequestModel,
-      final MqttRequestModel? mqttRequestModel}) = _$RequestModelImpl;
+      final MqttRequestModel? mqttRequestModel,
+      final GrpcRequestModel? grpcRequestModel}) = _$RequestModelImpl;
 
   factory _RequestModel.fromJson(Map<String, dynamic> json) =
       _$RequestModelImpl.fromJson;
@@ -556,6 +576,8 @@ abstract class _RequestModel implements RequestModel {
   AIRequestModel? get aiRequestModel;
   @override
   MqttRequestModel? get mqttRequestModel;
+  @override
+  GrpcRequestModel? get grpcRequestModel;
 
   /// Create a copy of RequestModel
   /// with the given fields replaced by the non-null parameter values.

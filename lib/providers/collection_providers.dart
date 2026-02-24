@@ -293,6 +293,14 @@ class CollectionStateNotifier
             httpRequestModel: null,
             aiRequestModel: null,
             mqttRequestModel: const MqttRequestModel()),
+        APIType.grpc => currentModel.copyWith(
+            apiType: apiType,
+            name: name ?? currentModel.name,
+            description: description ?? currentModel.description,
+            httpRequestModel: null,
+            aiRequestModel: null,
+            mqttRequestModel: null,
+            grpcRequestModel: const GrpcRequestModel()),
         APIType.websocket => currentModel.copyWith(
             apiType: apiType,
             name: name ?? currentModel.name,
@@ -356,6 +364,11 @@ class CollectionStateNotifier
 
     // MQTT uses dedicated connect/publish methods, not HTTP send flow
     if (requestModel?.apiType == APIType.mqtt) {
+      return;
+    }
+
+    // gRPC uses dedicated invoke methods, not HTTP send flow
+    if (requestModel?.apiType == APIType.grpc) {
       return;
     }
 

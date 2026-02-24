@@ -38,6 +38,10 @@ _$RequestModelImpl _$$RequestModelImplFromJson(Map json) => _$RequestModelImpl(
           ? null
           : MqttRequestModel.fromJson(
               Map<String, dynamic>.from(json['mqttRequestModel'] as Map)),
+      grpcRequestModel: json['grpcRequestModel'] == null
+          ? null
+          : GrpcRequestModel.fromJson(
+              Map<String, dynamic>.from(json['grpcRequestModel'] as Map)),
     );
 
 Map<String, dynamic> _$$RequestModelImplToJson(_$RequestModelImpl instance) =>
@@ -54,12 +58,14 @@ Map<String, dynamic> _$$RequestModelImplToJson(_$RequestModelImpl instance) =>
       'postRequestScript': instance.postRequestScript,
       'aiRequestModel': instance.aiRequestModel?.toJson(),
       'mqttRequestModel': instance.mqttRequestModel?.toJson(),
+      'grpcRequestModel': instance.grpcRequestModel?.toJson(),
     };
 
 const _$APITypeEnumMap = {
   APIType.rest: 'rest',
   APIType.ai: 'ai',
   APIType.graphql: 'graphql',
+  APIType.grpc: 'grpc',
   APIType.mqtt: 'mqtt',
   APIType.websocket: 'websocket',
 };
