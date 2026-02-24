@@ -562,3 +562,27 @@ const kMqttConnackReasons = {
   4: 'Connection Refused: Bad Username or Password',
   5: 'Connection Refused: Not Authorized',
 };
+
+// gRPC
+const kLabelGrpcMessage = "Message";
+const kLabelGrpcMetadata = "Metadata";
+const kLabelGrpcServiceDef = "Service Def";
+const kLabelGrpcSettings = "Settings";
+const kLabelGrpcConnecting = "Connecting...";
+const kLabelGrpcConnected = "Connected";
+const kLabelGrpcDisconnected = "Disconnected";
+const kLabelGrpcNotConnected = "Not Connected";
+const kLabelGrpcInvoke = "Invoke";
+const kLabelGrpcInvoking = "Invoking...";
+const kLabelGrpcCallType = "Call Type";
+const kLabelGrpcService = "Service";
+const kLabelGrpcMethod = "Method";
+const kLabelGrpcUseTls = "Use TLS";
+const kLabelGrpcPort = "Port";
+const kHintGrpcHost = "Enter gRPC host e.g. localhost";
+const kHintGrpcPort = "Port";
+const kHintGrpcMessageBody = "Enter request message as JSON";
+const kMsgGrpcSelectService = "Select a service";
+const kMsgGrpcSelectMethod = "Select a method";
+const kMsgGrpcConnectFirst = "Enter a host and click Connect to discover services";
+const kMsgGrpcNoServices = "No services discovered";

@@ -56,6 +56,13 @@ class EditorPaneRequestURLCard extends ConsumerWidget {
                       child: MqttClientIdField(),
                     ),
                   ],
+                  if (apiType == APIType.grpc) ...[
+                    kHSpacer10,
+                    const SizedBox(
+                      width: 80,
+                      child: GrpcPortField(),
+                    ),
+                  ],
                 ],
               )
             : Row(
@@ -83,6 +90,13 @@ class EditorPaneRequestURLCard extends ConsumerWidget {
                       child: MqttClientIdField(),
                     ),
                   ],
+                  if (apiType == APIType.grpc) ...[
+                    kHSpacer10,
+                    const SizedBox(
+                      width: 80,
+                      child: GrpcPortField(),
+                    ),
+                  ],
                   kHSpacer20,
                   SizedBox(
                     height: 36,
@@ -90,7 +104,9 @@ class EditorPaneRequestURLCard extends ConsumerWidget {
                         ? const MqttConnectButton()
                         : apiType == APIType.websocket
                             ? const WsConnectButton()
-                            : const SendRequestButton(),
+                            : apiType == APIType.grpc
+                                ? const GrpcConnectButton()
+                                : const SendRequestButton(),
                   )
                 ],
               ),
@@ -133,6 +149,8 @@ class URLTextField extends ConsumerWidget {
         .select((value) => value?.httpRequestModel?.url));
     ref.watch(selectedRequestModelProvider
         .select((value) => value?.mqttRequestModel?.url));
+    ref.watch(selectedRequestModelProvider
+        .select((value) => value?.grpcRequestModel?.host));
     final requestModel = ref
         .read(collectionStateNotifierProvider.notifier)
         .getRequestModel(selectedId!)!;
@@ -141,6 +159,7 @@ class URLTextField extends ConsumerWidget {
       initialValue: switch (requestModel.apiType) {
         APIType.ai => requestModel.aiRequestModel?.url,
         APIType.mqtt => requestModel.mqttRequestModel?.url,
+        APIType.grpc => requestModel.grpcRequestModel?.host,
         _ => requestModel.httpRequestModel?.url,
       },
       onChanged: (value) {
@@ -152,6 +171,10 @@ class URLTextField extends ConsumerWidget {
           ref.read(collectionStateNotifierProvider.notifier).update(
               mqttRequestModel:
                   requestModel.mqttRequestModel?.copyWith(url: value));
+        } else if (requestModel.apiType == APIType.grpc) {
+          ref.read(collectionStateNotifierProvider.notifier).update(
+              grpcRequestModel:
+                  requestModel.grpcRequestModel?.copyWith(host: value));
         } else {
           ref.read(collectionStateNotifierProvider.notifier).update(url: value);
         }
@@ -159,6 +182,8 @@ class URLTextField extends ConsumerWidget {
       onFieldSubmitted: (value) {
         if (requestModel.apiType == APIType.mqtt) {
           ref.read(collectionStateNotifierProvider.notifier).connectMqtt();
+        } else if (requestModel.apiType == APIType.grpc) {
+          ref.read(collectionStateNotifierProvider.notifier).connectGrpc();
         } else {
           ref.read(collectionStateNotifierProvider.notifier).sendRequest();
         }
@@ -353,6 +378,91 @@ class WsConnectButton extends ConsumerWidget {
                 : 'Connect',
         style: const TextStyle(fontSize: 13),
       ),
+    );
+  }
+}
+
+class GrpcPortField extends ConsumerWidget {
+  const GrpcPortField({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedId = ref.watch(selectedIdStateProvider);
+    ref.watch(selectedRequestModelProvider
+        .select((value) => value?.grpcRequestModel?.port));
+    final requestModel = ref
+        .read(collectionStateNotifierProvider.notifier)
+        .getRequestModel(selectedId!);
+    final port = requestModel?.grpcRequestModel?.port ?? 443;
+    return TextFormField(
+      key: Key("grpc-port-$selectedId"),
+      initialValue: port.toString(),
+      style: kCodeStyle,
+      keyboardType: TextInputType.number,
+      decoration: InputDecoration(
+        hintText: kHintGrpcPort,
+        hintStyle: kCodeStyle.copyWith(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+        border: InputBorder.none,
+      ),
+      onChanged: (value) {
+        final p = int.tryParse(value);
+        if (p != null) {
+          ref.read(collectionStateNotifierProvider.notifier).update(
+                grpcRequestModel:
+                    requestModel?.grpcRequestModel?.copyWith(port: p),
+              );
+        }
+      },
+    );
+  }
+}
+
+class GrpcConnectButton extends ConsumerWidget {
+  const GrpcConnectButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedId = ref.watch(selectedIdStateProvider);
+    if (selectedId == null) return kSizedBoxEmpty;
+
+    final connectionInfo = ref.watch(grpcConnectionProvider(selectedId));
+    final isConnected =
+        connectionInfo.state == GrpcConnectionState.connected;
+    final isConnecting =
+        connectionInfo.state == GrpcConnectionState.connecting;
+
+    return ADFilledButton(
+      isTonal: isConnected,
+      items: [
+        Text(
+          isConnecting
+              ? kLabelGrpcConnecting
+              : isConnected
+                  ? kLabelDisconnect
+                  : kLabelConnect,
+          style: kTextStyleButton,
+        ),
+        kHSpacer6,
+        Icon(
+          size: 16,
+          isConnected ? Icons.link_off : Icons.link,
+        ),
+      ],
+      onPressed: isConnecting
+          ? null
+          : () {
+              if (isConnected) {
+                ref
+                    .read(collectionStateNotifierProvider.notifier)
+                    .disconnectGrpc();
+              } else {
+                ref
+                    .read(collectionStateNotifierProvider.notifier)
+                    .connectGrpc();
+              }
+            },
     );
   }
 }

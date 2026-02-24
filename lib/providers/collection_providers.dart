@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:apidash_core/apidash_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -253,6 +255,7 @@ class CollectionStateNotifier
     String? postRequestScript,
     AIRequestModel? aiRequestModel,
     MqttRequestModel? mqttRequestModel,
+    GrpcRequestModel? grpcRequestModel,
   }) {
     final rId = id ?? ref.read(selectedIdStateProvider);
     if (rId == null) {
@@ -339,6 +342,8 @@ class CollectionStateNotifier
         aiRequestModel: aiRequestModel ?? currentModel.aiRequestModel,
         mqttRequestModel:
             mqttRequestModel ?? currentMqttRequestModel,
+        grpcRequestModel:
+            grpcRequestModel ?? currentModel.grpcRequestModel,
       );
     }
 
@@ -725,6 +730,137 @@ class CollectionStateNotifier
     manager.unsubscribe(topic);
   }
 
+  // gRPC methods
+
+  Future<void> connectGrpc() async {
+    final requestId = ref.read(selectedIdStateProvider);
+    if (requestId == null || state == null) return;
+
+    final requestModel = state![requestId];
+    final grpcConfig = requestModel?.grpcRequestModel;
+    if (grpcConfig == null || grpcConfig.host.isEmpty) return;
+
+    ref.read(grpcConnectionProvider(requestId).notifier).state =
+        const GrpcConnectionInfo(state: GrpcConnectionState.connecting);
+
+    try {
+      final manager = GrpcClientManager.getOrCreate(requestId);
+      await manager.connect(grpcConfig);
+      final services = manager.services;
+
+      ref.read(grpcConnectionProvider(requestId).notifier).state =
+          GrpcConnectionInfo(
+        state: GrpcConnectionState.connected,
+        services: services,
+      );
+
+      // Auto-select first service/method if available
+      if (services.isNotEmpty) {
+        final firstService = services.first;
+        ref.read(grpcSelectedServiceProvider(requestId).notifier).state =
+            firstService.serviceName;
+        if (firstService.methods.isNotEmpty) {
+          ref.read(grpcSelectedMethodProvider(requestId).notifier).state =
+              firstService.methods.first.methodName;
+        }
+      }
+    } catch (e) {
+      ref.read(grpcConnectionProvider(requestId).notifier).state =
+          GrpcConnectionInfo(
+        state: GrpcConnectionState.error,
+        errorMessage: 'Connection error: $e',
+      );
+    }
+  }
+
+  void disconnectGrpc() {
+    final requestId = ref.read(selectedIdStateProvider);
+    if (requestId == null) return;
+
+    GrpcClientManager.getOrCreate(requestId).disconnect();
+    ref.read(grpcConnectionProvider(requestId).notifier).state =
+        const GrpcConnectionInfo(state: GrpcConnectionState.disconnected);
+    ref.read(grpcSelectedServiceProvider(requestId).notifier).state = null;
+    ref.read(grpcSelectedMethodProvider(requestId).notifier).state = null;
+    ref.read(grpcResponseProvider(requestId).notifier).clear();
+  }
+
+  Future<void> invokeGrpc() async {
+    final requestId = ref.read(selectedIdStateProvider);
+    if (requestId == null || state == null) return;
+
+    final requestModel = state![requestId];
+    final grpcConfig = requestModel?.grpcRequestModel;
+    if (grpcConfig == null) return;
+
+    final selectedService =
+        ref.read(grpcSelectedServiceProvider(requestId));
+    final selectedMethod =
+        ref.read(grpcSelectedMethodProvider(requestId));
+    if (selectedService == null || selectedMethod == null) return;
+
+    // Find the method info
+    final connectionInfo = ref.read(grpcConnectionProvider(requestId));
+    GrpcMethodInfo? methodInfo;
+    for (final svc in connectionInfo.services) {
+      if (svc.serviceName == selectedService) {
+        for (final m in svc.methods) {
+          if (m.methodName == selectedMethod) {
+            methodInfo = m;
+            break;
+          }
+        }
+      }
+    }
+    if (methodInfo == null) return;
+
+    ref.read(grpcIsInvokingProvider(requestId).notifier).state = true;
+    ref.read(grpcResponseProvider(requestId).notifier).clear();
+
+    try {
+      final manager = GrpcClientManager.getOrCreate(requestId);
+      final body = ref.read(grpcRequestBodyProvider(requestId));
+
+      // Encode JSON body to protobuf bytes using type registry
+      Uint8List requestBytes;
+      if (manager.typeRegistry != null) {
+        final inputDescriptor = manager.typeRegistry!
+            .findMessage(methodInfo.inputTypeName);
+        if (inputDescriptor != null) {
+          final jsonMap = body.trim().isEmpty
+              ? <String, dynamic>{}
+              : Map<String, dynamic>.from(
+                  jsonDecode(body) as Map);
+          requestBytes =
+              jsonToProtobuf(jsonMap, inputDescriptor, manager.typeRegistry!);
+        } else {
+          // No descriptor for input type — send empty bytes
+          requestBytes = Uint8List(0);
+        }
+      } else {
+        requestBytes = Uint8List(0);
+      }
+
+      final result = await manager.callUnary(
+        method: methodInfo,
+        requestBytes: requestBytes,
+        metadata: grpcConfig.metadata,
+      );
+      ref.read(grpcResponseProvider(requestId).notifier).addResult(result);
+    } catch (e) {
+      ref.read(grpcResponseProvider(requestId).notifier).addResult(
+            GrpcCallResult(
+              statusCode: -1,
+              statusMessage: 'Invoke error: $e',
+              responseMessages: [],
+              duration: Duration.zero,
+            ),
+          );
+    } finally {
+      ref.read(grpcIsInvokingProvider(requestId).notifier).state = false;
+    }
+  }
+
   Future<void> clearData() async {
     ref.read(clearDataStateProvider.notifier).state = true;
     ref.read(selectedIdStateProvider.notifier).state = null;
@@ -754,7 +890,8 @@ class CollectionStateNotifier
           var jsonMap = Map<String, Object?>.from(jsonModel);
           var requestModel = RequestModel.fromJson(jsonMap);
           if (requestModel.httpRequestModel == null &&
-              requestModel.apiType != APIType.mqtt) {
+              requestModel.apiType != APIType.mqtt &&
+              requestModel.apiType != APIType.grpc) {
             requestModel = requestModel.copyWith(
               httpRequestModel: const HttpRequestModel(),
             );
@@ -763,6 +900,12 @@ class CollectionStateNotifier
               requestModel.apiType == APIType.mqtt) {
             requestModel = requestModel.copyWith(
               mqttRequestModel: const MqttRequestModel(),
+            );
+          }
+          if (requestModel.grpcRequestModel == null &&
+              requestModel.apiType == APIType.grpc) {
+            requestModel = requestModel.copyWith(
+              grpcRequestModel: const GrpcRequestModel(),
             );
           }
           data[id] = requestModel;
