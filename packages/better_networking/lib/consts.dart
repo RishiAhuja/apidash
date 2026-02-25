@@ -4,6 +4,7 @@ enum APIType {
   rest("HTTP", "HTTP"),
   ai("AI", "AI"),
   graphql("GraphQL", "GQL"),
+  grpc("gRPC", "gRPC"),
   mqtt("MQTT", "MQ"),
   websocket("WebSocket", "WS");
 

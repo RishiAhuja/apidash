@@ -6,6 +6,7 @@ import 'package:apidash/widgets/widgets.dart';
 import 'package:apidash/screens/common_widgets/common_widgets.dart';
 import 'package:apidash/dashbot/dashbot.dart';
 import 'request_pane/request_pane.dart';
+import 'grpc_response_pane.dart';
 import 'mqtt_response_pane.dart';
 import 'response_pane.dart';
 import 'ws_response_pane.dart';
@@ -27,6 +28,8 @@ class EditorPaneRequestDetailsCard extends ConsumerWidget {
       rightWidget = DashbotTab();
     } else if (apiType == APIType.mqtt) {
       rightWidget = const MqttResponsePane();
+    } else if (apiType == APIType.grpc) {
+      rightWidget = const GrpcResponsePane();
     } else if (codePaneVisible) {
       rightWidget = const CodePane();
     } else {
