@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:apidash_core/apidash_core.dart'; // re-exports better_networking → WsMessage, wsManager
+import 'package:apidash_core/apidash_core.dart'; // re-exports better_networking → WsMessage, WsMessageType, ContentType, wsManager
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // ---------------------------------------------------------------------------
@@ -116,4 +116,10 @@ class WsStateNotifier extends StateNotifier<WsState> {
 final wsStateProvider =
     StateNotifierProvider.family<WsStateNotifier, WsState, String>(
   (ref, requestId) => WsStateNotifier(requestId),
+);
+
+/// Content type for the compose message editor (JSON / text).
+final wsMessageContentTypeProvider =
+    StateProvider.family<ContentType, String>(
+  (ref, requestId) => ContentType.text,
 );

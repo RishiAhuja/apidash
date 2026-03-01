@@ -586,3 +586,10 @@ const kMsgGrpcSelectService = "Select a service";
 const kMsgGrpcSelectMethod = "Select a method";
 const kMsgGrpcConnectFirst = "Enter a host and click Connect to discover services";
 const kMsgGrpcNoServices = "No services discovered";
+
+// WebSocket
+const kHintWsMessage = "Enter message to send…";
+const kLabelWsMessage = "Message";
+const kLabelWsUrlParams = "URL Params";
+const kLabelWsHeaders = "Headers";
+const kLabelWsSend = "Send";
