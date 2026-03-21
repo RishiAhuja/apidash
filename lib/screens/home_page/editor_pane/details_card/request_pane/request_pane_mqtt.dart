@@ -1,6 +1,7 @@
 import 'package:apidash_core/apidash_core.dart';
 import 'package:apidash_design_system/apidash_design_system.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apidash/providers/providers.dart';
 import 'package:apidash/widgets/widgets.dart';
@@ -94,7 +95,29 @@ class MqttBottomBar extends ConsumerWidget {
         connectionInfo.state == MqttConnectionState.connected;
     final publishTopic = ref.watch(mqttPublishTopicProvider(selectedId!));
 
-    return Container(
+    void doPublish() {
+      final topic = ref.read(mqttPublishTopicProvider(selectedId!));
+      final payload = ref.read(mqttPublishPayloadProvider(selectedId!));
+      final pubQos = ref.read(mqttPublishQosProvider(selectedId!));
+      final pubRetain = ref.read(mqttPublishRetainProvider(selectedId!));
+      if (topic.trim().isNotEmpty) {
+        ref.read(collectionStateNotifierProvider.notifier)
+            .publishMqtt(topic, payload, pubQos, pubRetain);
+      }
+    }
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter, meta: true): () {
+          if (isConnected) doPublish();
+        },
+        const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
+          if (isConnected) doPublish();
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         border: Border(
@@ -180,25 +203,7 @@ class MqttBottomBar extends ConsumerWidget {
           SizedBox(
             height: 32,
             child: ADFilledButton(
-              onPressed: isConnected
-                  ? () {
-                      final topic = ref.read(
-                          mqttPublishTopicProvider(selectedId!));
-                      final payload = ref.read(
-                          mqttPublishPayloadProvider(selectedId!));
-                      final pubQos = ref.read(
-                          mqttPublishQosProvider(selectedId!));
-                      final pubRetain = ref.read(
-                          mqttPublishRetainProvider(selectedId!));
-                      if (topic.trim().isNotEmpty) {
-                        ref
-                            .read(
-                                collectionStateNotifierProvider.notifier)
-                            .publishMqtt(
-                                topic, payload, pubQos, pubRetain);
-                      }
-                    }
-                  : null,
+              onPressed: isConnected ? doPublish : null,
               items: const [
                 Icon(size: 16, Icons.send),
                 kHSpacer4,
@@ -206,7 +211,17 @@ class MqttBottomBar extends ConsumerWidget {
               ],
             ),
           ),
+          kHSpacer8,
+          Text(
+            '\u2318\u21b5',
+            style: TextStyle(
+              fontSize: 10,
+              color: Theme.of(context).colorScheme.outline,
+            ),
+          ),
         ],
+      ),
+    ),
       ),
     );
   }
