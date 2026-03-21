@@ -79,7 +79,6 @@ class WsStateNotifier extends StateNotifier<WsState> {
     state = state.copyWith(
       status: WsConnectionStatus.connecting,
       messages: [],
-      reconnectAttempt: 0,
     );
 
     // Start listening to the manager's message stream BEFORE connecting

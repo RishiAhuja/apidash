@@ -125,7 +125,7 @@ class MessageLogToolbar extends StatelessWidget {
                                 child: Text(
                                   '$matchCount found',
                                   style: TextStyle(
-                                      fontSize: 10, color: cs.outline),
+                                      fontSize: 11, color: cs.outline),
                                 ),
                               ),
                             InkWell(
@@ -195,7 +195,7 @@ class MessageLogToolbar extends StatelessWidget {
           // Message count
           Text(
             '$messageCount msg${messageCount != 1 ? 's' : ''}',
-            style: TextStyle(fontSize: 10, color: cs.outline),
+            style: TextStyle(fontSize: 12, color: cs.outline),
           ),
         ],
       ),
@@ -233,7 +233,7 @@ class _DirectionFilterChips extends StatelessWidget {
         padding: WidgetStatePropertyAll(
             const EdgeInsets.symmetric(horizontal: 8)),
         textStyle: WidgetStatePropertyAll(
-            const TextStyle(fontSize: 11)),
+            const TextStyle(fontSize: 12)),
       ),
       showSelectedIcon: false,
     );
@@ -282,7 +282,7 @@ class _TopicFilterDropdown extends StatelessWidget {
             kHSpacer4,
             Text(
               active ?? 'Topic',
-              style: const TextStyle(fontSize: 11),
+              style: const TextStyle(fontSize: 12),
               overflow: TextOverflow.ellipsis,
             ),
           ],
@@ -349,7 +349,7 @@ class ConnectionStatsBar extends StatelessWidget {
           kHSpacer6,
           Text(statusLabel,
               style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: statusColor)),
           if (duration != null) ...[
@@ -357,20 +357,20 @@ class ConnectionStatsBar extends StatelessWidget {
             Icon(Icons.timer_outlined, size: 12, color: cs.outline),
             kHSpacer4,
             Text(_formatDuration(duration),
-                style: TextStyle(fontSize: 10, color: cs.outline)),
+                style: TextStyle(fontSize: 12, color: cs.outline)),
           ],
           kHSpacer10,
           Text(
             '${sentCount + receivedCount} msgs ($receivedCount ↓ / $sentCount ↑)',
-            style: TextStyle(fontSize: 10, color: cs.outline),
+            style: TextStyle(fontSize: 12, color: cs.outline),
           ),
           kHSpacer10,
           Text(_formatBytes(totalBytes),
-              style: TextStyle(fontSize: 10, color: cs.outline)),
+              style: TextStyle(fontSize: 12, color: cs.outline)),
           if (extraInfo != null) ...[
             kHSpacer10,
             Text(extraInfo!,
-                style: TextStyle(fontSize: 10, color: cs.outline)),
+                style: TextStyle(fontSize: 12, color: cs.outline)),
           ],
           const Spacer(),
           if (onDisconnect != null)
@@ -379,10 +379,10 @@ class ConnectionStatsBar extends StatelessWidget {
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 minimumSize: const Size(0, 24),
-                textStyle: const TextStyle(fontSize: 11),
+                textStyle: const TextStyle(fontSize: 12),
               ),
               child: const Text('Disconnect',
-                  style: TextStyle(color: Colors.red, fontSize: 11)),
+                  style: TextStyle(color: Colors.red, fontSize: 12)),
             ),
         ],
       ),
@@ -482,16 +482,16 @@ class MessageLogRow extends StatelessWidget {
         InkWell(
           onTap: message.isStatus ? null : onToggleExpand,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: Row(
               children: [
                 // Direction icon
-                Icon(_directionIcon(), size: 14, color: dirColor),
+                Icon(_directionIcon(), size: 20, color: dirColor),
                 kHSpacer6,
                 // Timestamp
                 Text(
                   _formatTimestamp(),
-                  style: kCodeStyle.copyWith(fontSize: 10, color: cs.outline),
+                  style: kCodeStyle.copyWith(fontSize: 16, color: cs.outline),
                 ),
                 kHSpacer8,
                 // Topic label (MQTT)
@@ -507,7 +507,7 @@ class MessageLogRow extends StatelessWidget {
                     child: Text(
                       message.label!,
                       style: kCodeStyle.copyWith(
-                          fontSize: 10,
+                          fontSize: 16,
                           fontWeight: FontWeight.w600,
                           color: message.topicColor ?? cs.primary),
                       overflow: TextOverflow.ellipsis,
@@ -518,7 +518,7 @@ class MessageLogRow extends StatelessWidget {
                 // Badge (QoS, etc.)
                 if (message.badge != null) ...[
                   Text(message.badge!,
-                      style: TextStyle(fontSize: 9, color: cs.outline)),
+                      style: TextStyle(fontSize: 11, color: cs.outline)),
                   kHSpacer4,
                 ],
                 // Retained tag
@@ -534,7 +534,7 @@ class MessageLogRow extends StatelessWidget {
                       ),
                       child: Text('Retained',
                           style: TextStyle(
-                              fontSize: 8, color: Colors.orange.shade700)),
+                              fontSize: 10, color: Colors.orange.shade700)),
                     ),
                   ),
                 // Payload preview
@@ -542,7 +542,7 @@ class MessageLogRow extends StatelessWidget {
                   child: Text(
                     message.isStatus ? message.content : truncated,
                     style: kCodeStyle.copyWith(
-                      fontSize: 11,
+                      fontSize: 16,
                       fontStyle:
                           message.isStatus ? FontStyle.italic : FontStyle.normal,
                       color: message.isError
@@ -561,7 +561,7 @@ class MessageLogRow extends StatelessWidget {
                     padding: const EdgeInsets.only(left: 4),
                     child: Text(
                       '[${_formatSize(message.sizeBytes)}]',
-                      style: TextStyle(fontSize: 9, color: cs.outline),
+                      style: TextStyle(fontSize: 14, color: cs.outline),
                     ),
                   ),
                 // Expand chevron
@@ -570,7 +570,7 @@ class MessageLogRow extends StatelessWidget {
                     isExpanded
                         ? Icons.expand_less
                         : Icons.expand_more,
-                    size: 16,
+                    size: 20,
                     color: cs.outline,
                   ),
               ],
@@ -708,7 +708,7 @@ class _ExpandedDetail extends StatelessWidget {
             child: SingleChildScrollView(
               child: SelectableText(
                 formattedPayload,
-                style: kCodeStyle.copyWith(fontSize: 12),
+                style: kCodeStyle.copyWith(fontSize: 13),
               ),
             ),
           ),
@@ -746,7 +746,7 @@ class _FormatChip extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 9,
+            fontSize: 11,
             fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
             color: isActive ? cs.onPrimaryContainer : cs.outline,
           ),

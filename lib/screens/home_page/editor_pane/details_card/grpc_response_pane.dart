@@ -316,14 +316,14 @@ class _GrpcMetadataToggle extends StatelessWidget {
                 Text(
                   'Metadata',
                   style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: cs.outline),
                 ),
                 kHSpacer8,
                 Text(
                   '${headers.length + trailers.length} entries',
-                  style: TextStyle(fontSize: 10, color: cs.outline),
+                  style: TextStyle(fontSize: 12, color: cs.outline),
                 ),
               ],
             ),
@@ -378,14 +378,14 @@ class _MetadataRow extends StatelessWidget {
           Text(
             '$keyText: ',
             style: kCodeStyle.copyWith(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.bold,
                 color: cs.outline),
           ),
           Expanded(
             child: Text(
               valueText,
-              style: kCodeStyle.copyWith(fontSize: 11, color: cs.outline),
+              style: kCodeStyle.copyWith(fontSize: 12, color: cs.outline),
             ),
           ),
         ],

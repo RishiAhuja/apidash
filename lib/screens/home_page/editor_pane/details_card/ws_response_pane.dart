@@ -87,11 +87,6 @@ class _WsResponsePaneState extends ConsumerState<WsResponsePane> {
               sentCount: sentCount,
               receivedCount: recvCount,
               totalBytes: totalBytes,
-              onDisconnect: wsState.isConnected
-                  ? () => ref
-                      .read(wsStateProvider(selectedId).notifier)
-                      .disconnect()
-                  : null,
             ),
             // ── Message log or empty state ──
             Expanded(
