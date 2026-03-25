@@ -22,12 +22,15 @@ class EditMqttRequestPane extends ConsumerWidget {
     final codePaneVisible = ref.watch(codePaneVisibleStateProvider);
     final tabIndex = ref.watch(
         selectedRequestModelProvider.select((value) => value?.requestTabIndex));
-    final mqttModel = ref.watch(selectedRequestModelProvider
-        .select((value) => value?.mqttRequestModel));
-
-    final topicLength = mqttModel?.topics.length ?? 0;
-    final hasAuth = mqttModel?.hasAuth ?? false;
-    final hasLastWill = mqttModel?.hasLastWill ?? false;
+    // Watch only the three scalar values used here — NOT the whole mqttRequestModel.
+    // Watching the whole model causes a rebuild (and topicRows reset) on every
+    // URL/clientId/port keystroke, which is what caused the 's' topic bug.
+    final topicLength = ref.watch(selectedRequestModelProvider
+        .select((value) => value?.mqttRequestModel?.topics.length ?? 0));
+    final hasAuth = ref.watch(selectedRequestModelProvider
+        .select((value) => value?.mqttRequestModel?.hasAuth ?? false));
+    final hasLastWill = ref.watch(selectedRequestModelProvider
+        .select((value) => value?.mqttRequestModel?.hasLastWill ?? false));
 
     var currentTabIndex = tabIndex ?? 0;
     if (currentTabIndex >= 5) {
@@ -152,7 +155,7 @@ class MqttBottomBar extends ConsumerWidget {
           // QoS badge
           ADPopupMenu<MqttQos>(
             tooltip: kLabelQos,
-            width: 60,
+            width: 80,
             value: qos.label,
             values: MqttQos.values.map((e) => (e, e.label)),
             onChanged: (MqttQos? value) {

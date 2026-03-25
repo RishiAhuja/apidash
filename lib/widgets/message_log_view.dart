@@ -244,6 +244,11 @@ class _DirectionFilterChips extends StatelessWidget {
 // Topic filter dropdown (MQTT)
 // ---------------------------------------------------------------------------
 
+// Sentinel used to represent "All topics" selection, because Flutter's
+// PopupMenuButton.onSelected never fires for null values (null is treated
+// as "menu dismissed without selection").
+const _kAllTopics = '__all_topics__';
+
 class _TopicFilterDropdown extends StatelessWidget {
   const _TopicFilterDropdown({
     required this.topics,
@@ -256,12 +261,12 @@ class _TopicFilterDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<String?>(
+    return PopupMenuButton<String>(
       tooltip: 'Filter by topic',
-      initialValue: active,
-      onSelected: onChanged,
+      initialValue: active ?? _kAllTopics,
+      onSelected: (v) => onChanged(v == _kAllTopics ? null : v),
       itemBuilder: (_) => [
-        const PopupMenuItem(value: null, child: Text('All topics')),
+        const PopupMenuItem(value: _kAllTopics, child: Text('All topics')),
         const PopupMenuDivider(),
         ...topics.map((t) => PopupMenuItem(value: t, child: Text(t))),
       ],
@@ -466,11 +471,21 @@ class MessageLogRow extends StatelessWidget {
     }
   }
 
+  String _compactPreview(String raw) {
+    // Try to minify as JSON first (removes all whitespace between tokens)
+    try {
+      return jsonEncode(jsonDecode(raw));
+    } catch (_) {
+      // Not JSON — collapse all whitespace sequences to a single space
+      return raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final dirColor = message.topicColor ?? _directionColor(context);
-    final payloadPreview = message.content.replaceAll('\n', ' ');
+    final payloadPreview = _compactPreview(message.content);
     final truncated = payloadPreview.length > 120
         ? '${payloadPreview.substring(0, 120)}…'
         : payloadPreview;
@@ -521,22 +536,6 @@ class MessageLogRow extends StatelessWidget {
                       style: TextStyle(fontSize: 11, color: cs.outline)),
                   kHSpacer4,
                 ],
-                // Retained tag
-                if (message.retained)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 3, vertical: 0.5),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.15),
-                        borderRadius: kBorderRadius4,
-                      ),
-                      child: Text('Retained',
-                          style: TextStyle(
-                              fontSize: 10, color: Colors.orange.shade700)),
-                    ),
-                  ),
                 // Payload preview
                 Expanded(
                   child: Text(

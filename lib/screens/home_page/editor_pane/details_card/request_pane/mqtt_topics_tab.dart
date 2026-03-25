@@ -20,6 +20,10 @@ class _MqttTopicsTabState extends ConsumerState<MqttTopicsTab> {
   final random = Random.secure();
   late List<MqttTopicModel> topicRows;
   bool isAddingRow = false;
+  // Tracks the last topics list synced from the model so we only reset
+  // topicRows when the model content actually changes (not on every
+  // connection-state rebuild).
+  List<MqttTopicModel>? _lastSyncedTopics;
 
   @override
   void initState() {
@@ -47,10 +51,21 @@ class _MqttTopicsTabState extends ConsumerState<MqttTopicsTab> {
     var topics =
         ref.read(selectedRequestModelProvider)?.mqttRequestModel?.topics;
     bool isTopicsEmpty = topics == null || topics.isEmpty;
-    topicRows = isTopicsEmpty
-        ? [kMqttTopicEmptyModel]
-        : topics + [kMqttTopicEmptyModel];
-    isAddingRow = false;
+    // Only reset topicRows when the saved topics content actually changed
+    // (e.g. row added/removed, or model loaded fresh). Connection-state
+    // rebuilds should not overwrite in-memory edits that haven't been
+    // persisted to topicRows yet.
+    final savedTopics = isTopicsEmpty ? <MqttTopicModel>[] : topics;
+    if (_lastSyncedTopics == null ||
+        savedTopics.length != _lastSyncedTopics!.length ||
+        !List.generate(savedTopics.length, (i) => i)
+            .every((i) => savedTopics[i] == _lastSyncedTopics![i])) {
+      _lastSyncedTopics = List.of(savedTopics);
+      topicRows = isTopicsEmpty
+          ? [kMqttTopicEmptyModel]
+          : savedTopics + [kMqttTopicEmptyModel];
+      isAddingRow = false;
+    }
 
     final connectionInfo = selectedId != null
         ? ref.watch(mqttConnectionProvider(selectedId))
@@ -140,17 +155,30 @@ class _MqttTopicsTabState extends ConsumerState<MqttTopicsTab> {
                   onChanged: isLast || !isConnected
                       ? null
                       : (value) {
+                          // Always read the topic from the latest saved model
+                          // so we use the full text the user typed, not a
+                          // stale snapshot that may have been reset during a
+                          // connection-state rebuild.
+                          final savedTopics = ref
+                              .read(selectedRequestModelProvider)
+                              ?.mqttRequestModel
+                              ?.topics;
+                          final currentTopic =
+                              (savedTopics != null &&
+                                      index < savedTopics.length)
+                                  ? savedTopics[index].topic
+                                  : topicModel.topic;
                           if (value) {
                             ref
                                 .read(
                                     collectionStateNotifierProvider.notifier)
                                 .subscribeMqttTopic(
-                                    topicModel.topic, topicModel.qos);
+                                    currentTopic, topicModel.qos);
                           } else {
                             ref
                                 .read(
                                     collectionStateNotifierProvider.notifier)
-                                .unsubscribeMqttTopic(topicModel.topic);
+                                .unsubscribeMqttTopic(currentTopic);
                           }
                           setState(() {});
                         },
