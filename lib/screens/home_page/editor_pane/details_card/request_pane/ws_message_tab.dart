@@ -26,8 +26,8 @@ class WsMessageTab extends ConsumerWidget {
     return Column(
       children: [
         // Content-type selector row — mirrors MqttMessageTab
-        SizedBox(
-          height: kHeaderHeight,
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [

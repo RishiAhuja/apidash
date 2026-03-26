@@ -1,6 +1,7 @@
 import 'package:apidash_core/apidash_core.dart';
 import 'package:apidash_design_system/apidash_design_system.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apidash/providers/providers.dart';
 import 'package:apidash/widgets/widgets.dart';
@@ -21,12 +22,15 @@ class EditMqttRequestPane extends ConsumerWidget {
     final codePaneVisible = ref.watch(codePaneVisibleStateProvider);
     final tabIndex = ref.watch(
         selectedRequestModelProvider.select((value) => value?.requestTabIndex));
-    final mqttModel = ref.watch(selectedRequestModelProvider
-        .select((value) => value?.mqttRequestModel));
-
-    final topicLength = mqttModel?.topics.length ?? 0;
-    final hasAuth = mqttModel?.hasAuth ?? false;
-    final hasLastWill = mqttModel?.hasLastWill ?? false;
+    // Watch only the three scalar values used here — NOT the whole mqttRequestModel.
+    // Watching the whole model causes a rebuild (and topicRows reset) on every
+    // URL/clientId/port keystroke, which is what caused the 's' topic bug.
+    final topicLength = ref.watch(selectedRequestModelProvider
+        .select((value) => value?.mqttRequestModel?.topics.length ?? 0));
+    final hasAuth = ref.watch(selectedRequestModelProvider
+        .select((value) => value?.mqttRequestModel?.hasAuth ?? false));
+    final hasLastWill = ref.watch(selectedRequestModelProvider
+        .select((value) => value?.mqttRequestModel?.hasLastWill ?? false));
 
     var currentTabIndex = tabIndex ?? 0;
     if (currentTabIndex >= 5) {
@@ -94,7 +98,29 @@ class MqttBottomBar extends ConsumerWidget {
         connectionInfo.state == MqttConnectionState.connected;
     final publishTopic = ref.watch(mqttPublishTopicProvider(selectedId!));
 
-    return Container(
+    void doPublish() {
+      final topic = ref.read(mqttPublishTopicProvider(selectedId!));
+      final payload = ref.read(mqttPublishPayloadProvider(selectedId!));
+      final pubQos = ref.read(mqttPublishQosProvider(selectedId!));
+      final pubRetain = ref.read(mqttPublishRetainProvider(selectedId!));
+      if (topic.trim().isNotEmpty) {
+        ref.read(collectionStateNotifierProvider.notifier)
+            .publishMqtt(topic, payload, pubQos, pubRetain);
+      }
+    }
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter, meta: true): () {
+          if (isConnected) doPublish();
+        },
+        const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
+          if (isConnected) doPublish();
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         border: Border(
@@ -129,7 +155,7 @@ class MqttBottomBar extends ConsumerWidget {
           // QoS badge
           ADPopupMenu<MqttQos>(
             tooltip: kLabelQos,
-            width: 60,
+            width: 80,
             value: qos.label,
             values: MqttQos.values.map((e) => (e, e.label)),
             onChanged: (MqttQos? value) {
@@ -180,25 +206,7 @@ class MqttBottomBar extends ConsumerWidget {
           SizedBox(
             height: 32,
             child: ADFilledButton(
-              onPressed: isConnected
-                  ? () {
-                      final topic = ref.read(
-                          mqttPublishTopicProvider(selectedId!));
-                      final payload = ref.read(
-                          mqttPublishPayloadProvider(selectedId!));
-                      final pubQos = ref.read(
-                          mqttPublishQosProvider(selectedId!));
-                      final pubRetain = ref.read(
-                          mqttPublishRetainProvider(selectedId!));
-                      if (topic.trim().isNotEmpty) {
-                        ref
-                            .read(
-                                collectionStateNotifierProvider.notifier)
-                            .publishMqtt(
-                                topic, payload, pubQos, pubRetain);
-                      }
-                    }
-                  : null,
+              onPressed: isConnected ? doPublish : null,
               items: const [
                 Icon(size: 16, Icons.send),
                 kHSpacer4,
@@ -206,7 +214,17 @@ class MqttBottomBar extends ConsumerWidget {
               ],
             ),
           ),
+          kHSpacer8,
+          Text(
+            '\u2318\u21b5',
+            style: TextStyle(
+              fontSize: 10,
+              color: Theme.of(context).colorScheme.outline,
+            ),
+          ),
         ],
+      ),
+    ),
       ),
     );
   }

@@ -534,6 +534,7 @@ const kHintMqttTopic = "Enter topic";
 const kHintMqttPayload = "Enter message payload";
 const kLabelMqttConnected = "Connected";
 const kLabelMqttDisconnected = "Disconnected";
+const kLabelWsConnecting = "Connecting...";
 const kLabelMqttConnecting = "Connecting...";
 const kLabelMqttNotConnected = "Not Connected";
 const kLabelMqttVersion = "MQTT Version";

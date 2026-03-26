@@ -22,8 +22,8 @@ class MqttMessageTab extends ConsumerWidget {
 
     return Column(
       children: [
-        SizedBox(
-          height: kHeaderHeight,
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [

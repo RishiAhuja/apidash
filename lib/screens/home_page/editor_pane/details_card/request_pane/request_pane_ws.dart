@@ -2,6 +2,7 @@ import 'package:apidash/providers/providers.dart';
 import 'package:apidash_core/apidash_core.dart';
 import 'package:apidash_design_system/apidash_design_system.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apidash/consts.dart';
 import 'request_headers.dart';
@@ -42,7 +43,22 @@ class _EditWSRequestPaneState extends ConsumerState<EditWSRequestPane>
 
     final wsState = ref.watch(wsStateProvider(selectedId));
 
-    return Column(
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter, meta: true): () {
+          if (wsState.canSend) {
+            ref.read(wsStateProvider(selectedId).notifier).send();
+          }
+        },
+        const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
+          if (wsState.canSend) {
+            ref.read(wsStateProvider(selectedId).notifier).send();
+          }
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: Column(
       children: [
         kVSpacer10,
         TabBar(
@@ -79,10 +95,20 @@ class _EditWSRequestPaneState extends ConsumerState<EditWSRequestPane>
                 icon: const Icon(Icons.send, size: 16),
                 label: const Text(kLabelWsSend),
               ),
+              kHSpacer8,
+              Text(
+                '⌘↵',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+              ),
             ],
           ),
         ),
       ],
+    ),
+      ),
     );
   }
 }

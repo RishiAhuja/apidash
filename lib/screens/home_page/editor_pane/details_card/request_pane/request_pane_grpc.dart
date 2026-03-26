@@ -1,6 +1,7 @@
 import 'package:apidash_core/apidash_core.dart';
 import 'package:apidash_design_system/apidash_design_system.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apidash/providers/providers.dart';
 import 'package:apidash/widgets/widgets.dart';
@@ -101,7 +102,22 @@ class GrpcBottomBar extends ConsumerWidget {
       }
     }
 
-    return Container(
+    void doInvoke() {
+      ref.read(collectionStateNotifierProvider.notifier).invokeGrpc();
+    }
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter, meta: true): () {
+          if (isConnected && !isInvoking) doInvoke();
+        },
+        const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
+          if (isConnected && !isInvoking) doInvoke();
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         border: Border(
@@ -168,13 +184,7 @@ class GrpcBottomBar extends ConsumerWidget {
           SizedBox(
             height: 32,
             child: ADFilledButton(
-              onPressed: isConnected && !isInvoking
-                  ? () {
-                      ref
-                          .read(collectionStateNotifierProvider.notifier)
-                          .invokeGrpc();
-                    }
-                  : null,
+              onPressed: isConnected && !isInvoking ? doInvoke : null,
               items: [
                 Icon(size: 16, isInvoking ? Icons.hourglass_top : Icons.send),
                 kHSpacer4,
@@ -185,7 +195,17 @@ class GrpcBottomBar extends ConsumerWidget {
               ],
             ),
           ),
+          kHSpacer8,
+          Text(
+            '\u2318\u21b5',
+            style: TextStyle(
+              fontSize: 10,
+              color: Theme.of(context).colorScheme.outline,
+            ),
+          ),
         ],
+      ),
+    ),
       ),
     );
   }

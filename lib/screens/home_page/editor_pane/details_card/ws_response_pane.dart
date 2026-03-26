@@ -1,16 +1,29 @@
+import 'dart:convert';
+
 import 'package:apidash/providers/providers.dart';
+import 'package:apidash/widgets/message_log_view.dart';
 import 'package:apidash_core/apidash_core.dart';
 import 'package:apidash_design_system/apidash_design_system.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
-/// Chat-style response panel for WebSocket conversations.
-class WsResponsePane extends ConsumerWidget {
+/// Professional message-log response panel for WebSocket conversations.
+///
+/// Replaces the old chat-bubble UI with a compact, searchable, filterable
+/// message timeline inspired by Postman's WebSocket interface.
+class WsResponsePane extends ConsumerStatefulWidget {
   const WsResponsePane({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<WsResponsePane> createState() => _WsResponsePaneState();
+}
+
+class _WsResponsePaneState extends ConsumerState<WsResponsePane> {
+  DateTime? _connectedSince;
+
+  @override
+  Widget build(BuildContext context) {
     final selectedId = ref.watch(selectedIdStateProvider);
     if (selectedId == null) {
       return const Center(child: Text('No request selected'));
@@ -19,68 +32,26 @@ class WsResponsePane extends ConsumerWidget {
     final wsState = ref.watch(wsStateProvider(selectedId));
     final messages = wsState.messages;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // ---- Status bar ----
-        _WsStatusBar(selectedId: selectedId, status: wsState.status),
-        const Divider(height: 1),
-        // ---- Message list ----
-        Expanded(
-          child: messages.isEmpty
-              ? Center(
-                  child: Text(
-                    wsState.status == WsConnectionStatus.idle
-                        ? 'Not connected yet.\nEnter a ws:// URL and press Connect.'
-                        : wsState.isConnecting
-                            ? 'Connecting…'
-                            : 'No messages yet.',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(color: Colors.grey),
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(8),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    return _WsMessageBubble(message: messages[index]);
-                  },
-                ),
-        ),
-        // ---- Actions ----
-        if (messages.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () =>
-                    ref.read(wsStateProvider(selectedId).notifier).clearMessages(),
-                icon: const Icon(Icons.clear_all, size: 16),
-                label: const Text('Clear'),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
+    // Track connection start time
+    if (wsState.isConnected && _connectedSince == null) {
+      _connectedSince = DateTime.now();
+    } else if (!wsState.isConnected && !wsState.isConnecting) {
+      _connectedSince = null;
+    }
 
-// ---------------------------------------------------------------------------
-// Status bar
-// ---------------------------------------------------------------------------
+    // Convert WsMessage → LogMessage
+    final logMessages = messages.map((m) => LogMessage(
+          content: m.content,
+          direction: switch (m.type) {
+            WsMessageType.sent => MessageDirection.sent,
+            WsMessageType.received => MessageDirection.received,
+            WsMessageType.error => MessageDirection.error,
+            _ => MessageDirection.status,
+          },
+          timestamp: m.timestamp,
+        )).toList();
 
-class _WsStatusBar extends ConsumerWidget {
-  const _WsStatusBar({required this.selectedId, required this.status});
-  final String selectedId;
-  final WsConnectionStatus status;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final (label, color) = switch (status) {
+    final (statusLabel, statusColor) = switch (wsState.status) {
       WsConnectionStatus.connected => ('Connected', Colors.green),
       WsConnectionStatus.connecting => ('Connecting…', Colors.orange),
       WsConnectionStatus.disconnected => ('Disconnected', Colors.grey),
@@ -88,112 +59,93 @@ class _WsStatusBar extends ConsumerWidget {
       WsConnectionStatus.idle => ('Idle', Colors.grey),
     };
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Row(
-        children: [
-          Icon(Icons.circle, size: 10, color: color),
-          kHSpacer8,
-          Text(label, style: TextStyle(color: color, fontSize: 12)),
-          const Spacer(),
-          if (status == WsConnectionStatus.connected)
-            TextButton(
-              onPressed: () =>
-                  ref.read(wsStateProvider(selectedId).notifier).disconnect(),
-              child: const Text('Disconnect',
-                  style: TextStyle(fontSize: 12, color: Colors.red)),
+    // Compute stats
+    final sentCount = messages.where((m) => m.isSent).length;
+    final recvCount = messages.where((m) => m.isReceived).length;
+    int totalBytes = 0;
+    for (final m in messages) {
+      if (!m.isStatus) totalBytes += utf8.encode(m.content).length;
+    }
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyL, meta: true): () =>
+            ref.read(wsStateProvider(selectedId).notifier).clearMessages(),
+        const SingleActivator(LogicalKeyboardKey.keyL, control: true): () =>
+            ref.read(wsStateProvider(selectedId).notifier).clearMessages(),
+      },
+      child: Focus(
+        autofocus: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Connection stats bar ──
+            ConnectionStatsBar(
+              statusLabel: statusLabel,
+              statusColor: statusColor,
+              connectedSince: _connectedSince,
+              sentCount: sentCount,
+              receivedCount: recvCount,
+              totalBytes: totalBytes,
             ),
-        ],
+            // ── Message log or empty state ──
+            Expanded(
+              child: messages.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.cable_outlined,
+                              size: 48,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outlineVariant),
+                          kVSpacer10,
+                          Text(
+                            wsState.status == WsConnectionStatus.idle
+                                ? 'Not connected yet.\nEnter a ws:// URL and press Connect.'
+                                : wsState.isConnecting
+                                    ? 'Connecting…'
+                                    : 'No messages yet.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .outlineVariant),
+                          ),
+                        ],
+                      ),
+                    )
+                  : MessageLogView(
+                      messages: logMessages,
+                      onClear: () => ref
+                          .read(wsStateProvider(selectedId).notifier)
+                          .clearMessages(),
+                      onExport: () => _exportMessages(context, logMessages),
+                      onResend: (msg) {
+                        ref
+                            .read(wsStateProvider(selectedId).notifier)
+                            .updateMessageInput(msg.content);
+                        ref.read(wsStateProvider(selectedId).notifier).send();
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
-}
 
-// ---------------------------------------------------------------------------
-// Message bubble
-// ---------------------------------------------------------------------------
-
-class _WsMessageBubble extends StatelessWidget {
-  const _WsMessageBubble({required this.message});
-  final WsMessage message;
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isRight = message.isSent;
-    final Color bubbleColor;
-    final Color textColor;
-    final String prefix;
-
-    if (message.isStatus) {
-      // Status messages span full width, centre-aligned.
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Center(
-          child: Text(
-            message.content,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey,
-                  fontStyle: FontStyle.italic,
-                ),
-          ),
-        ),
-      );
-    }
-
-    if (message.isError) {
-      bubbleColor = Colors.red.shade50;
-      textColor = Colors.red.shade800;
-      prefix = '⚠ ';
-    } else if (message.isSent) {
-      bubbleColor = Theme.of(context).colorScheme.primary.withOpacity(0.15);
-      textColor = Theme.of(context).colorScheme.onSurface;
-      prefix = '';
-    } else {
-      bubbleColor =
-          Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.4);
-      textColor = Theme.of(context).colorScheme.onSurface;
-      prefix = '';
-    }
-
-    final timeStr =
-        DateFormat('HH:mm:ss').format(message.timestamp.toLocal());
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Align(
-        alignment: isRight ? Alignment.centerRight : Alignment.centerLeft,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.75,
-          ),
-          child: Card(
-            color: bubbleColor,
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Column(
-                crossAxisAlignment: isRight
-                    ? CrossAxisAlignment.end
-                    : CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$prefix${message.content}',
-                    style: TextStyle(color: textColor),
-                  ),
-                  kVSpacer3,
-                  Text(
-                    '${isRight ? "You" : "Server"}  $timeStr',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: textColor.withOpacity(0.6),
-                          fontSize: 10,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+  void _exportMessages(BuildContext context, List<LogMessage> messages) {
+    final json = MessageExporter.toJson(messages);
+    Clipboard.setData(ClipboardData(text: json));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Messages exported to clipboard as JSON'),
+        duration: Duration(seconds: 2),
       ),
     );
   }

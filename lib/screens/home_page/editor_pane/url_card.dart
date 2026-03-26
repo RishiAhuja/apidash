@@ -163,18 +163,24 @@ class URLTextField extends ConsumerWidget {
         _ => requestModel.httpRequestModel?.url,
       },
       onChanged: (value) {
-        if (requestModel.apiType == APIType.ai) {
+        // Always read the LATEST model to avoid reverting concurrent field edits
+        // (e.g. clientId field changing the model between our last build and now).
+        final current = ref
+            .read(collectionStateNotifierProvider.notifier)
+            .getRequestModel(selectedId!);
+        if (current == null) return;
+        if (current.apiType == APIType.ai) {
           ref.read(collectionStateNotifierProvider.notifier).update(
               aiRequestModel:
-                  requestModel.aiRequestModel?.copyWith(url: value));
-        } else if (requestModel.apiType == APIType.mqtt) {
+                  current.aiRequestModel?.copyWith(url: value));
+        } else if (current.apiType == APIType.mqtt) {
           ref.read(collectionStateNotifierProvider.notifier).update(
               mqttRequestModel:
-                  requestModel.mqttRequestModel?.copyWith(url: value));
-        } else if (requestModel.apiType == APIType.grpc) {
+                  current.mqttRequestModel?.copyWith(url: value));
+        } else if (current.apiType == APIType.grpc) {
           ref.read(collectionStateNotifierProvider.notifier).update(
               grpcRequestModel:
-                  requestModel.grpcRequestModel?.copyWith(host: value));
+                  current.grpcRequestModel?.copyWith(host: value));
         } else {
           ref.read(collectionStateNotifierProvider.notifier).update(url: value);
         }
@@ -274,9 +280,14 @@ class MqttClientIdField extends ConsumerWidget {
         border: InputBorder.none,
       ),
       onChanged: (value) {
+        // Read the latest model so we don't revert URL/other fields changed
+        // between this widget's last build and when the user typed here.
+        final latest = ref
+            .read(collectionStateNotifierProvider.notifier)
+            .getRequestModel(selectedId!);
         ref.read(collectionStateNotifierProvider.notifier).update(
               mqttRequestModel:
-                  requestModel?.mqttRequestModel?.copyWith(clientId: value),
+                  latest?.mqttRequestModel?.copyWith(clientId: value),
             );
       },
       optionsWidthFactor: 1,
@@ -344,16 +355,23 @@ class WsConnectButton extends ConsumerWidget {
     final isConnected = wsState.status == WsConnectionStatus.connected;
     final isConnecting = wsState.status == WsConnectionStatus.connecting;
 
-    return FilledButton(
-      style: FilledButton.styleFrom(
-        backgroundColor: isConnected
-            ? Theme.of(context).colorScheme.error
-            : Colors.teal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        shape: RoundedRectangleBorder(
-          borderRadius: kBorderRadius8,
+    return ADFilledButton(
+      isTonal: isConnected,
+      items: [
+        Text(
+          isConnecting
+              ? kLabelWsConnecting
+              : isConnected
+                  ? kLabelDisconnect
+                  : kLabelConnect,
+          style: kTextStyleButton,
         ),
-      ),
+        kHSpacer6,
+        Icon(
+          size: 16,
+          isConnected ? Icons.link_off : Icons.link,
+        ),
+      ],
       onPressed: isConnecting
           ? null
           : () {
@@ -370,14 +388,6 @@ class WsConnectButton extends ConsumerWidget {
                     .connect(url ?? '');
               }
             },
-      child: Text(
-        isConnecting
-            ? 'Connecting…'
-            : isConnected
-                ? 'Disconnect'
-                : 'Connect',
-        style: const TextStyle(fontSize: 13),
-      ),
     );
   }
 }

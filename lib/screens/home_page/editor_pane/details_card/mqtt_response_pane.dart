@@ -1,314 +1,228 @@
-import 'package:apidash_core/apidash_core.dart';
+import 'dart:convert';
+
+import 'package:apidash/providers/providers.dart';
+import 'package:apidash/widgets/message_log_view.dart';
 import 'package:apidash_design_system/apidash_design_system.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:apidash/providers/providers.dart';
-import 'package:apidash/consts.dart';
-import 'package:apidash/utils/utils.dart';
 
-class MqttResponsePane extends ConsumerWidget {
+/// Topic color palette for automatic color-coding per unique topic.
+const _topicColorPalette = <Color>[
+  Colors.teal,
+  Colors.indigo,
+  Colors.deepOrange,
+  Colors.purple,
+  Colors.cyan,
+  Colors.amber,
+  Colors.pink,
+  Colors.green,
+  Colors.blueGrey,
+  Colors.brown,
+];
+
+/// Professional message-log response panel for MQTT conversations.
+///
+/// Replaces the old chat-bubble UI with a compact, searchable, filterable
+/// message timeline with topic-based color-coding inspired by MQTTX.
+class MqttResponsePane extends ConsumerStatefulWidget {
   const MqttResponsePane({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MqttResponsePane> createState() => _MqttResponsePaneState();
+}
+
+class _MqttResponsePaneState extends ConsumerState<MqttResponsePane> {
+  DateTime? _connectedSince;
+
+  /// Assign a stable colour to each unique topic.
+  final Map<String, Color> _topicColors = {};
+
+  Color _colorForTopic(String topic) {
+    return _topicColors.putIfAbsent(
+      topic,
+      () => _topicColorPalette[_topicColors.length % _topicColorPalette.length],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final selectedId = ref.watch(selectedIdStateProvider);
-    if (selectedId == null) return kSizedBoxEmpty;
+    if (selectedId == null) {
+      return const Center(child: Text('No request selected'));
+    }
 
     final connectionInfo = ref.watch(mqttConnectionProvider(selectedId));
     final messages = ref.watch(mqttMessagesProvider(selectedId));
 
-    return Column(
-      children: [
-        // Connection status header
-        MqttConnectionStatusHeader(
-          connectionInfo: connectionInfo,
-          onClear: () {
-            ref.read(mqttMessagesProvider(selectedId).notifier).clear();
-          },
-        ),
-        // Message feed
-        Expanded(
-          child: connectionInfo.state == MqttConnectionState.disconnected &&
-                  messages.isEmpty
-              ? const MqttNotConnectedWidget()
-              : connectionInfo.state == MqttConnectionState.error
-                  ? MqttErrorWidget(
-                      errorMessage: connectionInfo.errorMessage)
-                  : MqttMessageFeed(messages: messages),
-        ),
-      ],
-    );
-  }
-}
-
-class MqttConnectionStatusHeader extends StatelessWidget {
-  const MqttConnectionStatusHeader({
-    super.key,
-    required this.connectionInfo,
-    this.onClear,
-  });
-
-  final MqttConnectionInfo connectionInfo;
-  final VoidCallback? onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    final statusColor = switch (connectionInfo.state) {
-      MqttConnectionState.connected => Colors.green,
-      MqttConnectionState.connecting => Colors.orange,
-      MqttConnectionState.error => Colors.red,
-      MqttConnectionState.disconnected => Colors.grey,
-    };
-
-    final statusText = switch (connectionInfo.state) {
-      MqttConnectionState.connected => kLabelMqttConnected,
-      MqttConnectionState.connecting => kLabelMqttConnecting,
-      MqttConnectionState.error => "Error",
-      MqttConnectionState.disconnected => kLabelMqttDisconnected,
-    };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: statusColor,
-            ),
-          ),
-          kHSpacer8,
-          Text(
-            statusText,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: statusColor,
-            ),
-          ),
-          const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, size: 18),
-            tooltip: kTooltipClearResponse,
-            onPressed: onClear,
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class MqttNotConnectedWidget extends StatelessWidget {
-  const MqttNotConnectedWidget({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.cloud_off_outlined,
-            size: 48,
-            color: Theme.of(context).colorScheme.outlineVariant,
-          ),
-          kVSpacer10,
-          Text(
-            kLabelMqttNotConnected,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                ),
-          ),
-          kVSpacer5,
-          Text(
-            "Enter a broker host and click Connect",
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class MqttErrorWidget extends StatelessWidget {
-  const MqttErrorWidget({super.key, this.errorMessage});
-  final String? errorMessage;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            kVSpacer10,
-            Text(
-              "Connection Error",
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-            ),
-            if (errorMessage != null) ...[
-              kVSpacer5,
-              Text(
-                errorMessage!,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class MqttMessageFeed extends StatelessWidget {
-  const MqttMessageFeed({super.key, required this.messages});
-  final List<MqttMessageModel> messages;
-
-  @override
-  Widget build(BuildContext context) {
-    if (messages.isEmpty) {
-      return Center(
-        child: Text(
-          "No messages yet",
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.outlineVariant,
-              ),
-        ),
-      );
+    // Track connection start time
+    if (connectionInfo.state == MqttConnectionState.connected &&
+        _connectedSince == null) {
+      _connectedSince = DateTime.now();
+    } else if (connectionInfo.state == MqttConnectionState.disconnected ||
+        connectionInfo.state == MqttConnectionState.error) {
+      _connectedSince = null;
     }
 
-    return ListView.builder(
-      reverse: true,
-      padding: const EdgeInsets.all(12),
-      itemCount: messages.length,
-      itemBuilder: (context, index) {
-        final msg = messages[messages.length - 1 - index];
-        return MqttMessageBubble(message: msg);
+    // Convert MqttMessageModel → LogMessage with topic colors
+    final logMessages = messages.map((m) {
+      final topicColor = _colorForTopic(m.topic);
+      return LogMessage(
+        content: m.payload,
+        direction: m.isPublished
+            ? MessageDirection.sent
+            : MessageDirection.received,
+        timestamp: m.timestamp,
+        label: m.topic,
+        badge: m.qos.label,
+        retained: m.retained,
+        topicColor: topicColor,
+      );
+    }).toList();
+
+    final (statusLabel, statusColor) = switch (connectionInfo.state) {
+      MqttConnectionState.connected => ('Connected', Colors.green),
+      MqttConnectionState.connecting => ('Connecting…', Colors.orange),
+      MqttConnectionState.error => ('Error', Colors.red),
+      MqttConnectionState.disconnected => ('Disconnected', Colors.grey),
+    };
+
+    // Compute stats
+    final pubCount = messages.where((m) => m.isPublished).length;
+    final subCount = messages.length - pubCount;
+    int totalBytes = 0;
+    for (final m in messages) {
+      totalBytes += utf8.encode(m.payload).length;
+    }
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyL, meta: true): () =>
+            ref.read(mqttMessagesProvider(selectedId).notifier).clear(),
+        const SingleActivator(LogicalKeyboardKey.keyL, control: true): () =>
+            ref.read(mqttMessagesProvider(selectedId).notifier).clear(),
       },
-    );
-  }
-}
-
-class MqttMessageBubble extends StatelessWidget {
-  const MqttMessageBubble({super.key, required this.message});
-  final MqttMessageModel message;
-
-  @override
-  Widget build(BuildContext context) {
-    final isPublished = message.isPublished;
-    final brightness = Theme.of(context).brightness;
-    final bubbleColor = isPublished
-        ? (brightness == Brightness.dark
-            ? Colors.teal.shade900
-            : Colors.teal.shade50)
-        : (brightness == Brightness.dark
-            ? Colors.blueGrey.shade900
-            : Colors.blueGrey.shade50);
-    final labelColor = isPublished
-        ? getAPIColor(APIType.mqtt, brightness: brightness)
-        : Colors.blueGrey;
-
-    return Align(
-      alignment: isPublished ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.7,
-        ),
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: bubbleColor,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: labelColor.withValues(alpha: 0.3),
-          ),
-        ),
+      child: Focus(
+        autofocus: true,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  message.topic,
-                  style: kCodeStyle.copyWith(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: labelColor,
-                  ),
-                ),
-                kHSpacer8,
-                Text(
-                  isPublished
-                      ? kLabelPublishedMessage
-                      : kLabelSubscribedMessage,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: labelColor.withValues(alpha: 0.7),
-                  ),
-                ),
-              ],
+            // ── Connection stats bar ──
+            ConnectionStatsBar(
+              statusLabel: statusLabel,
+              statusColor: statusColor,
+              connectedSince: _connectedSince,
+              sentCount: pubCount,
+              receivedCount: subCount,
+              totalBytes: totalBytes,
             ),
-            const SizedBox(height: 4),
-            SelectableText(
-              message.payload,
-              style: kCodeStyle.copyWith(fontSize: 12),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  "${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}:${message.timestamp.second.toString().padLeft(2, '0')}",
-                  style: TextStyle(
-                    fontSize: 9,
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                  ),
-                ),
-                kHSpacer5,
-                Text(
-                  message.qos.label,
-                  style: TextStyle(
-                    fontSize: 9,
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                  ),
-                ),
-                if (message.retained) ...[
-                  kHSpacer5,
-                  Text(
-                    "Retained",
-                    style: TextStyle(
-                      fontSize: 9,
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                    ),
-                  ),
-                ],
-              ],
+            // ── Message log or empty state ──
+            Expanded(
+              child: connectionInfo.state ==
+                          MqttConnectionState.disconnected &&
+                      messages.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.cloud_off_outlined,
+                              size: 48,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outlineVariant),
+                          kVSpacer10,
+                          Text(
+                            'Not connected yet.\nEnter a broker host and press Connect.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .outlineVariant),
+                          ),
+                        ],
+                      ),
+                    )
+                  : connectionInfo.state == MqttConnectionState.error
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.error_outline,
+                                    size: 48,
+                                    color:
+                                        Theme.of(context).colorScheme.error),
+                                kVSpacer10,
+                                Text(
+                                  'Connection Error',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .error),
+                                ),
+                                if (connectionInfo.errorMessage != null) ...[
+                                  kVSpacer5,
+                                  Text(
+                                    connectionInfo.errorMessage!,
+                                    textAlign: TextAlign.center,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .error),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        )
+                      : MessageLogView(
+                          messages: logMessages,
+                          showTopicFilter: true,
+                          onClear: () => ref
+                              .read(
+                                  mqttMessagesProvider(selectedId).notifier)
+                              .clear(),
+                          onExport: () =>
+                              _exportMessages(context, logMessages),
+                          onResend: (msg) {
+                            // Re-publish by setting the topic and payload,
+                            // then triggering publish via the collection notifier.
+                            if (msg.label != null) {
+                              ref
+                                  .read(mqttPublishTopicProvider(selectedId)
+                                      .notifier)
+                                  .state = msg.label!;
+                            }
+                            ref
+                                .read(mqttPublishPayloadProvider(selectedId)
+                                    .notifier)
+                                .state = msg.content;
+                          },
+                        ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _exportMessages(BuildContext context, List<LogMessage> messages) {
+    final json = MessageExporter.toJson(messages);
+    Clipboard.setData(ClipboardData(text: json));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Messages exported to clipboard'),
+        duration: Duration(seconds: 2),
       ),
     );
   }
